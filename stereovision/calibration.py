@@ -89,9 +89,9 @@ class StereoCalibration(object):
         folder overwrites a calibration object.
         """
         #: Camera matrices (M)
-        self.cam_mats = {"left": None, "right": None}
+        self.cam_mats = {"left": np.zeros((3, 3)), "right": np.zeros((3, 3))}
         #: Distortion coefficients (D)
-        self.dist_coefs = {"left": None, "right": None}
+        self.dist_coefs = {"left": np.zeros((1, 5)), "right": np.zeros((1, 5))}
         #: Rotation matrix (R)
         self.rot_mat = None
         #: Translation vector (T)
@@ -188,8 +188,8 @@ class StereoCalibrator(object):
         self.image_size = image_size
         pattern_size = (self.rows, self.columns)
         corner_coordinates = np.zeros((np.prod(pattern_size), 3), np.float32)
-        corner_coordinates[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
-        corner_coordinates *= self.square_size
+        corner_coordinates[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2)
+        #corner_coordinates *= self.square_size
         #: Real world corner coordinates found in each image
         self.corner_coordinates = corner_coordinates
         #: Array of real world corner coordinates to match the corners found
@@ -222,34 +222,47 @@ class StereoCalibrator(object):
         flags = (cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST +
                  cv2.CALIB_SAME_FOCAL_LENGTH)
         calib = StereoCalibration()
+
+        (calib.cam_mats["left"],
+         calib.dist_coefs["left"]) = cv2.calibrateCamera(self.object_points,
+                                                         self.image_points["left"],
+                                                         self.image_size,
+                                                         None,
+                                                         None)[1:3]
+
+        (calib.cam_mats["right"],
+         calib.dist_coefs["right"]) = cv2.calibrateCamera(self.object_points,
+                                                         self.image_points["right"],
+                                                         self.image_size,
+                                                         None,
+                                                         None)[1:3]
+
         (calib.cam_mats["left"], calib.dist_coefs["left"],
          calib.cam_mats["right"], calib.dist_coefs["right"],
          calib.rot_mat, calib.trans_vec, calib.e_mat,
          calib.f_mat) = cv2.stereoCalibrate(self.object_points,
                                             self.image_points["left"],
                                             self.image_points["right"],
-                                            self.image_size,
                                             calib.cam_mats["left"],
                                             calib.dist_coefs["left"],
                                             calib.cam_mats["right"],
                                             calib.dist_coefs["right"],
-                                            calib.rot_mat,
-                                            calib.trans_vec,
-                                            calib.e_mat,
-                                            calib.f_mat,
-                                            criteria=criteria,
-                                            flags=flags)[1:]
+                                            self.image_size,
+                                            criteria,
+                                            flags)[1:]
+
         (calib.rect_trans["left"], calib.rect_trans["right"],
          calib.proj_mats["left"], calib.proj_mats["right"],
          calib.disp_to_depth_mat, calib.valid_boxes["left"],
          calib.valid_boxes["right"]) = cv2.stereoRectify(calib.cam_mats["left"],
-                                                      calib.dist_coefs["left"],
-                                                      calib.cam_mats["right"],
-                                                      calib.dist_coefs["right"],
-                                                      self.image_size,
-                                                      calib.rot_mat,
-                                                      calib.trans_vec,
-                                                      flags=0)
+                                                         calib.dist_coefs["left"],
+                                                         calib.cam_mats["right"],
+                                                         calib.dist_coefs["right"],
+                                                         self.image_size,
+                                                         calib.rot_mat,
+                                                         calib.trans_vec,
+                                                         0,
+                                                         (0, 0))
         for side in ("left", "right"):
             (calib.undistortion_map[side],
              calib.rectification_map[side]) = cv2.initUndistortRectifyMap(

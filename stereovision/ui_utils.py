@@ -103,7 +103,7 @@ def calibrate_folder(args):
         calibrator.add_corners((img_left, im_right),
                                show_results=args.show_chessboards)
         args.input_files = args.input_files[2:]
-        progress.update(progress.maxval - len(args.input_files))
+        progress.update(progress.max_value - len(args.input_files))
 
     progress.finish()
     print("Calibrating cameras. This can take a while.")
@@ -147,7 +147,7 @@ class BMTuner(object):
             maximum = self.block_matcher.parameter_maxima[parameter]
             if not maximum:
                 maximum = self.shortest_dimension
-            cv2.createTrackbar(parameter, self.window_name,
+            cv2.createTrackbar(parameter, 'Tunner',
                                self.block_matcher.__getattribute__(parameter),
                                maximum,
                                partial(self._set_value, parameter))
@@ -177,7 +177,8 @@ class BMTuner(object):
         self.bm_settings = {}
         for parameter in self.block_matcher.parameter_maxima.keys():
             self.bm_settings[parameter] = []
-        cv2.namedWindow(self.window_name)
+        cv2.namedWindow(self.window_name, cv2.WINDOW_AUTOSIZE)
+        cv2.namedWindow('Tunner', cv2.WINDOW_AUTOSIZE)
         self._initialize_trackbars()
         self.tune_pair(image_pair)
 
@@ -191,6 +192,8 @@ class BMTuner(object):
         """
         disparity = self.block_matcher.get_disparity(self.pair)
         norm_coeff = 255 / disparity.max()
+        #vis = cv2.resize(disparity * norm_coeff / 255, None, fx=0.5, fy=0.5)
+        cv2.resizeWindow(self.window_name, 1280, 720)
         cv2.imshow(self.window_name, disparity * norm_coeff / 255)
         cv2.waitKey()
 
@@ -216,8 +219,7 @@ class BMTuner(object):
         value_frequency = {}
         for value in unique_values:
             value_frequency[settings_list.count(value)] = value
-        frequencies = value_frequency.keys()
-        frequencies.sort(reverse=True)
+        frequencies = sorted(value_frequency.keys())
         header = "{} value | Selection frequency".format(parameter)
         left_column_width = len(header[:-21])
         right_column_width = 21

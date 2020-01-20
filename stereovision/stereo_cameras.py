@@ -72,6 +72,10 @@ class StereoPair(object):
         for window in self.windows:
             cv2.destroyWindow(window)
 
+    def set_captures_prop(self, propId, propValue):
+        for capture in self.captures:
+            capture.set(propId, propValue)
+
     def get_frames(self):
         """Get current frames from cameras."""
         return [capture.read()[1] for capture in self.captures]

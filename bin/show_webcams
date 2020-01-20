@@ -43,9 +43,17 @@ def main():
                         help="Folder to write output images to.")
     parser.add_argument("--interval", type=float, default=1,
                         help="Interval (s) to take pictures in.")
+    parser.add_argument("--frame-width", type=int, help="Camera's frame width.")
+    parser.add_argument("--frame-height", type=int, help="Camera's frame height.")
     args = parser.parse_args()
 
     with StereoPair(args.devices) as pair:
+        if args.frame_width:
+            pair.set_captures_prop(cv2.CAP_PROP_FRAME_WIDTH, args.frame_width)
+
+        if args.frame_height:
+            pair.set_captures_prop(cv2.CAP_PROP_FRAME_HEIGHT, args.frame_height)
+
         if not args.output_folder:
             pair.show_videos()
         else:
