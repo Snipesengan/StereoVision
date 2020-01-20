@@ -57,7 +57,7 @@ class StereoPair(object):
 
         if devices[0] != devices[1]:
             #: Video captures associated with the ``StereoPair``
-            self.captures = [cv2.VideoCapture(device) for device in devices]
+            self.captures = [cv2.VideoCapture(device + cv2.CAP_DSHOW) for device in devices]
         else:
             # Stereo images come from a single device, as single image
             self.captures = [cv2.VideoCapture(devices[0])]
