@@ -99,7 +99,9 @@ class StereoPair(object):
         """
         for window, frame in zip(self.windows, self.get_frames()):
             cv2.imshow(window, frame)
-        cv2.waitKey(wait)
+        k = cv2.waitKey(wait)
+
+        return k
 
     def show_videos(self):
         """Show video from cameras."""

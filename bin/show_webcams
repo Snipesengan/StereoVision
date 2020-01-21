@@ -60,14 +60,16 @@ def main():
             i = 1
             while True:
                 start = time.time()
-                while time.time() < start + args.interval:
-                    pair.show_frames(1)
-                images = pair.get_frames()
-                for side, image in zip(("left", "right"), images):
-                    filename = "{}_{}.ppm".format(side, i)
-                    output_path = os.path.join(args.output_folder, filename)
-                    cv2.imwrite(output_path, image)
-                i += 1
+                k = pair.show_frames(1)
+                if k == ord('q'):
+                    break
+                elif k == ord(' '):
+                    images = pair.get_frames()
+                    for side, image in zip(("left", "right"), images):
+                        filename = "{}_{}.ppm".format(side, i)
+                        output_path = os.path.join(args.output_folder, filename)
+                        cv2.imwrite(output_path, image)
+                    i += 1
 
 
 if __name__ == "__main__":

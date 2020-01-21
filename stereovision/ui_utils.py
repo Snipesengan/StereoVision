@@ -39,8 +39,11 @@ Classes:
 from argparse import ArgumentParser
 from functools import partial
 import os
+import tkinter
+import PIL.Image, PIL.ImageTk
 
 import cv2
+import numpy as np
 from progressbar import ProgressBar, Percentage, Bar
 from stereovision.calibration import StereoCalibrator
 from stereovision.exceptions import BadBlockMatcherArgumentError
@@ -49,18 +52,17 @@ from stereovision.exceptions import BadBlockMatcherArgumentError
 CHESSBOARD_ARGUMENTS = ArgumentParser(add_help=False)
 CHESSBOARD_ARGUMENTS.add_argument("--rows", type=int,
                                   help="Number of inside corners in the "
-                                  "chessboard's rows.", default=9)
+                                       "chessboard's rows.", default=9)
 CHESSBOARD_ARGUMENTS.add_argument("--columns", type=int,
                                   help="Number of inside corners in the "
-                                  "chessboard's columns.", default=6)
+                                       "chessboard's columns.", default=6)
 CHESSBOARD_ARGUMENTS.add_argument("--square-size", help="Size of chessboard "
-                                  "squares in cm.", type=float, default=1.8)
-
+                                                        "squares in cm.", type=float, default=1.8)
 
 #: Command line arguments for using StereoBM rather than StereoSGBM
 STEREO_BM_FLAG = ArgumentParser(add_help=False)
 STEREO_BM_FLAG.add_argument("--use_stereobm", help="Use StereoBM rather than "
-                              "StereoSGBM block matcher.", action="store_true")
+                                                   "StereoSGBM block matcher.", action="store_true")
 
 
 def find_files(folder):
@@ -93,8 +95,8 @@ def calibrate_folder(args):
     calibrator = StereoCalibrator(args.rows, args.columns, args.square_size,
                                   (width, height))
     progress = ProgressBar(maxval=len(args.input_files),
-                          widgets=[Bar("=", "[", "]"),
-                          " ", Percentage()])
+                           widgets=[Bar("=", "[", "]"),
+                                    " ", Percentage()])
     print("Reading input files...")
     progress.start()
     while args.input_files:
@@ -116,7 +118,6 @@ def calibrate_folder(args):
 
 
 class BMTuner(object):
-
     """
     A class for tuning Stereo BM settings.
 
@@ -139,24 +140,36 @@ class BMTuner(object):
             return
         self.update_disparity_map()
 
-    def _initialize_trackbars(self):
+    def _initialize_entries(self):
         """
         Initialize trackbars by discovering ``block_matcher``'s parameters.
         """
-        for parameter in self.block_matcher.parameter_maxima.keys():
+        for i, parameter in enumerate(self.block_matcher.parameter_maxima.keys()):
             maximum = self.block_matcher.parameter_maxima[parameter]
             if not maximum:
                 maximum = self.shortest_dimension
-            cv2.createTrackbar(parameter, 'Tunner',
-                               self.block_matcher.__getattribute__(parameter),
-                               maximum,
-                               partial(self._set_value, parameter))
+
+            label_text = tkinter.StringVar()
+            label_text.set(parameter)
+            entry_label = tkinter.Label(self.tuner_frame, textvariable=label_text)
+
+            entry_var = tkinter.DoubleVar()  # entry variable
+            entry_var.set(self.block_matcher.__getattribute__(parameter))
+            entry = tkinter.Entry(self.tuner_frame, textvariable=entry_var, width=10)
+
+            button = tkinter.Button(self.tuner_frame, text='Ok', width=10,
+                                    command=lambda param=parameter, var=entry_var: self._set_value(
+                                        param, int(var.get())))
+
+            entry_label.grid(column=0, row=i, pady=5, padx=5, sticky='nw')
+            entry.grid(column=1, row=i, pady=5, padx=5, sticky='nw')
+            button.grid(column=2, row=i, pady=5, padx=5, sticky='nw')
 
     def _save_bm_state(self):
         """Save current state of ``block_matcher``."""
         for parameter in self.block_matcher.parameter_maxima.keys():
             self.bm_settings[parameter].append(
-                               self.block_matcher.__getattribute__(parameter))
+                    self.block_matcher.__getattribute__(parameter))
 
     def __init__(self, block_matcher, calibration, image_pair):
         """
@@ -171,16 +184,36 @@ class BMTuner(object):
         self.pair = image_pair
         #: Block matcher to be tuned
         self.block_matcher = block_matcher
+        # Disparity image, must keep a reference for tkinter Canvas to work
+        self.disparity_img = None
         #: Shortest dimension of image
         self.shortest_dimension = min(self.pair[0].shape[:2])
         #: Settings chosen for ``BlockMatcher``
         self.bm_settings = {}
         for parameter in self.block_matcher.parameter_maxima.keys():
             self.bm_settings[parameter] = []
-        cv2.namedWindow(self.window_name, cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('Tunner', cv2.WINDOW_AUTOSIZE)
-        self._initialize_trackbars()
+
+        # Tkinter UI Stuff
+        self.root_window = tkinter.Tk()
+        self.root_window.title('Blockmatcher Tuner')
+        # Frame used to attached slider bars
+        self.tuner_frame = tkinter.Frame(self.root_window)
+        # Canvas to display disparity image
+        self.canvas_frame = tkinter.Frame(self.root_window)
+        self.canvas = tkinter.Canvas(self.canvas_frame,
+                                     width=self.pair[0].shape[1],
+                                     height=self.pair[0].shape[0])
+
+        # Layout how the two main GUI components displayed
+        self.tuner_frame.pack(side=tkinter.LEFT, anchor='nw')
+        self.canvas_frame.pack(side=tkinter.LEFT, anchor='nw')
+        self.canvas.pack(fill=tkinter.X)
+
+        self.canvas_img = self.canvas.create_image(0, 0, image=self.disparity_img, anchor='nw')
+        self._initialize_entries()
         self.tune_pair(image_pair)
+
+        tkinter.mainloop()
 
     def update_disparity_map(self):
         """
@@ -192,10 +225,9 @@ class BMTuner(object):
         """
         disparity = self.block_matcher.get_disparity(self.pair)
         norm_coeff = 255 / disparity.max()
-        #vis = cv2.resize(disparity * norm_coeff / 255, None, fx=0.5, fy=0.5)
-        cv2.resizeWindow(self.window_name, 1280, 720)
-        cv2.imshow(self.window_name, disparity * norm_coeff / 255)
-        cv2.waitKey()
+        pil_img = PIL.Image.fromarray(np.uint8(disparity * norm_coeff))
+        self.disparity_img = PIL.ImageTk.PhotoImage(pil_img)
+        self.canvas.itemconfig(self.canvas_img, image=self.disparity_img)
 
     def tune_pair(self, pair):
         """Tune a pair of images."""
@@ -225,10 +257,10 @@ class BMTuner(object):
         right_column_width = 21
         report.append(header)
         report.append("{}|{}".format("-" * left_column_width,
-                                    "-" * right_column_width))
+                                     "-" * right_column_width))
         for frequency in frequencies:
             left_column = str(value_frequency[frequency]).center(
-                                                             left_column_width)
+                    left_column_width)
             right_column = str(frequency).center(right_column_width)
             report.append("{}|{}".format(left_column, right_column))
         # Remove newest settings
